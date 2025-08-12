@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Serviço de Código de Barras EAN13</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .preview-container {
+            max-width: 100%;
+            height: 300px;
+            border: 2px dashed #ccc;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+            position: relative;
+        }
+        #imagePreview {
+            max-width: 100%;
+            max-height: 100%;
+            display: none;
+        }
+        #dropText {
+            color: #999;
+        }
+        .result-container {
+            display: none;
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        .success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+        }
+        #loadingIndicator {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-5">
+        <h1 class="mb-4">Serviço de Código de Barras EAN13</h1>
+        
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        Upload de Imagem
+                    </div>
+                    <div class="card-body">
+                        <div class="preview-container" id="previewContainer">
+                            <div id="dropText">Arraste uma imagem ou clique para selecionar</div>
+                            <img id="imagePreview" alt="Preview da imagem">
+                            <div id="loadingIndicator" class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Processando...</span>
+                            </div>
+                        </div>
+                        
+                        <form id="uploadForm">
+                            <div class="mb-3">
+                                <input type="file" class="form-control" id="imageInput" accept="image/*">
+                            </div>
+                            <button type="submit" class="btn btn-primary">Detectar Código de Barras</button>
+                        </form>
+                        
+                        <div class="result-container" id="resultContainer">
+                            <h4>Resultado:</h4>
+                            <div id="resultContent"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        Informações
+                    </div>
+                    <div class="card-body">
+                        <h5>Como usar</h5>
+                        <ol>
+                            <li>Faça upload de uma imagem contendo um código de barras EAN13.</li>
+                            <li>Clique em "Detectar Código de Barras".</li>
+                            <li>O sistema tentará identificar o código de barras na imagem.</li>
+                        </ol>
+                        
+                        <h5>API Endpoints</h5>
+                        <ul>
+                            <li><code>POST /api/barcode/decode</code> - Decodifica um código de barras de uma imagem</li>
+                            <li><code>GET /api/barcode/info/:barcode</code> - Obtém informações sobre um código de barras</li>
+                        </ul>
+                        
+                        <h5>Exemplos de Códigos EAN13</h5>
+                        <ul>
+                            <li>5901234123457</li>
+                            <li>7891000100103</li>
+                            <li>7891025115649</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const previewContainer = document.getElementById('previewContainer');
+            const imagePreview = document.getElementById('imagePreview');
+            const dropText = document.getElementById('dropText');
+            const imageInput = document.getElementById('imageInput');
+            const uploadForm = document.getElementById('uploadForm');
+            const resultContainer = document.getElementById('resultContainer');
+            const resultContent = document.getElementById('resultContent');
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            
+            // Exibir preview da imagem
+            imageInput.addEventListener('change', function() {
+                if (this.files && this.files[0]) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        imagePreview.src = e.target.result;
+                        imagePreview.style.display = 'block';
+                        dropText.style.display = 'none';
+                    };
+                    reader.readAsDataURL(this.files[0]);
+                }
+            });
+            
+            // Drag & Drop
+            previewContainer.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                this.style.borderColor = '#007bff';
+            });
+            
+            previewContainer.addEventListener('dragleave', function() {
+                this.style.borderColor = '#ccc';
+            });
+            
+            previewContainer.addEventListener('drop', function(e) {
+                e.preventDefault();
+                this.style.borderColor = '#ccc';
+                
+                if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                    imageInput.files = e.dataTransfer.files;
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        imagePreview.src = e.target.result;
+                        imagePreview.style.display = 'block';
+                        dropText.style.display = 'none';
+                    };
+                    reader.readAsDataURL(e.dataTransfer.files[0]);
+                }
+            });
+            
+            // Clicar no container também aciona o input
+            previewContainer.addEventListener('click', function() {
+                imageInput.click();
+            });
+            
+            // Submeter o formulário
+            uploadForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                if (!imageInput.files || !imageInput.files[0]) {
+                    showResult('Selecione uma imagem primeiro.', false);
+                    return;
+                }
+                
+                const formData = new FormData();
+                formData.append('image', imageInput.files[0]);
+                
+                // Obter a API key do localStorage ou solicitar ao usuário
+                let apiKey = localStorage.getItem('barcode_api_key');
+                if (!apiKey) {
+                    apiKey = prompt('Digite sua API key para acessar o serviço:');
+                    if (apiKey) {
+                        localStorage.setItem('barcode_api_key', apiKey);
+                    } else {
+                        showResult('API key é necessária para usar este serviço.', false);
+                        return;
+                    }
+                }
+                
+                loadingIndicator.style.display = 'block';
+                resultContainer.style.display = 'none';
+                
+                try {
+                    const response = await fetch('/api/barcode/decode', {
+                        method: 'POST',
+                        headers: {
+                            'X-API-Key': apiKey
+                        },
+                        body: formData
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (response.status === 401 || response.status === 403) {
+                        // Se a API key foi rejeitada, solicitar novamente
+                        localStorage.removeItem('barcode_api_key');
+                        showResult('API key inválida. Por favor, tente novamente com uma chave válida.', false);
+                        return;
+                    }
+                    
+                    if (response.ok && data.success) {
+                        // Se conseguimos um código de barras, vamos buscar informações adicionais
+                        const infoResponse = await fetch(`/api/barcode/info/${data.barcode}`, {
+                            headers: {
+                                'X-API-Key': apiKey
+                            }
+                        });
+                        const infoData = await infoResponse.json();
+                        
+                        let resultHtml = `
+                            <div class="alert alert-success">
+                                <p><strong>Código de Barras:</strong> ${data.barcode}</p>
+                        `;
+                        
+                        if (infoResponse.ok && infoData.success) {
+                            resultHtml += `
+                                <p><strong>Tipo:</strong> ${infoData.type}</p>
+                                <p><strong>Checksum Válido:</strong> ${infoData.isValid ? 'Sim' : 'Não'}</p>
+                            `;
+                        }
+                        
+                        resultHtml += '</div>';
+                        
+                        showResult(resultHtml, true, false);
+                    } else {
+                        showResult(`Não foi possível detectar o código de barras: ${data.message}`, false);
+                    }
+                } catch (error) {
+                    showResult(`Erro ao processar a imagem: ${error.message}`, false);
+                } finally {
+                    loadingIndicator.style.display = 'none';
+                }
+            });
+            
+            function showResult(content, isSuccess, isHtml = true) {
+                resultContainer.style.display = 'block';
+                resultContainer.className = 'result-container ' + (isSuccess ? 'success' : 'error');
+                
+                if (isHtml) {
+                    resultContent.innerHTML = content;
+                } else {
+                    resultContent.textContent = content;
+                }
+            }
+        });
+    </script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
