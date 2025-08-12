@@ -6,8 +6,8 @@ API para leitura de código de barras em imagens usando ExpressJS, otimizada par
 
 - Detecção de código de barras em imagens (jpg, png)
 - Otimizado para códigos EAN13
-- API REST para integração com outros sistemas
-- Interface web simples para teste
+- API REST com autenticação por API Key
+- Interface web para teste e demonstração
 - Suporte a validação de checksums
 
 ## Tecnologias Utilizadas
@@ -15,8 +15,7 @@ API para leitura de código de barras em imagens usando ExpressJS, otimizada par
 - Node.js
 - Express.js
 - Canvas (processamento de imagem)
-- BarcodeDetector (detecção de códigos)
-- Quagga2 (detecção de códigos alternativa)
+- Quagga2 (detecção de códigos)
 - Multer (upload de arquivos)
 
 ## Instalação
@@ -29,19 +28,55 @@ cd barcode
 # Instalar dependências
 npm install
 
-# Executar em desenvolvimento
-npm run dev
-
-# Executar testes
-npm test
+# Configurar variáveis de ambiente
+cp .env.example .env
+# Edite o arquivo .env e configure sua API_KEY
 ```
 
 ## Requisitos
 
-- Node.js v14+
+- Node.js v18+
 - Dependências do Canvas (https://github.com/Automattic/node-canvas#compiling)
 
+## Uso
+
+### Iniciar o servidor
+
+```bash
+# Executar em produção
+npm start
+
+# Executar em desenvolvimento com auto-reload
+npm run dev
+```
+
+### Acessar a interface web
+
+Abra o navegador em:
+```
+http://localhost:3000
+```
+
 ## Uso da API
+
+### Autenticação
+
+Todas as rotas da API requerem um cabeçalho `x-api-key` com a chave API configurada no arquivo .env.
+Em ambiente de desenvolvimento (NODE_ENV=development), a autenticação é desabilitada.
+
+### Verificar API Key
+
+```
+GET /api/check-key
+```
+
+**Resposta:**
+```json
+{
+  "success": true,
+  "message": "API Key válida"
+}
+```
 
 ### Decodificar código de barras
 
@@ -79,20 +114,13 @@ GET /api/barcode/info/:barcode
 }
 ```
 
-## Interface Web
-
-Uma interface web simples está disponível na rota raiz (`/`) para testar o serviço de detecção de código de barras.
-
 ## Testes
 
-O projeto inclui testes automatizados para garantir o funcionamento correto do serviço de código de barras:
+O projeto inclui testes automatizados para garantir o funcionamento correto do serviço:
 
 ```bash
 # Executar todos os testes
 npm test
-
-# Executar testes com watch mode
-npm run test:watch
 ```
 
 ## Estrutura do Projeto
@@ -101,17 +129,23 @@ npm run test:watch
 barcode/
 ├── examples/           # Imagens de exemplo para testes
 ├── public/             # Arquivos estáticos (interface web)
+├── scripts/            # Scripts utilitários
 ├── src/
-│   ├── routes/         # Rotas da API
-│   ├── services/       # Serviços de negócio
-│   └── app.js          # Aplicação principal
+│   └── services/       # Serviços de negócio (BarcodeService)
 ├── temp/               # Diretório temporário para processamento
-└── test/               # Testes automatizados
+├── test/               # Testes automatizados
+└── server.js           # Aplicação principal e ponto de entrada
 ```
+
+## Pré-processamento de Imagens
+
+O serviço realiza os seguintes processamentos na imagem para melhorar a taxa de detecção:
+1. Ajuste de contraste
+2. Conversão para escala de cinza
 
 ## Limitações
 
-- O serviço é otimizado para códigos EAN13, mas pode detectar outros formatos como EAN8, Code39 e Code128
+- O serviço é otimizado para códigos EAN13 e EAN8
 - A qualidade da imagem afeta significativamente a taxa de detecção
 - Imagens com múltiplos códigos de barras retornarão apenas o primeiro detectado
 

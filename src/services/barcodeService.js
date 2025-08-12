@@ -5,6 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 const { createCanvas, loadImage } = require('canvas');
+const Quagga = require('@ericblade/quagga2');
 
 class BarcodeService {
   /**
@@ -43,20 +44,16 @@ class BarcodeService {
       const ctx = canvas.getContext('2d');
       ctx.drawImage(img, 0, 0);
       
-      // Aplicar processamento para melhorar detecção
-      const processedCanvas = await this.preprocessImage(canvas);
+      // Processar imagem para melhorar detecção
+      this._preprocessImageInPlace(canvas);
       
       // Salvar a imagem processada temporariamente
       const tempImagePath = path.join(tmpDir, `processed_image_${Date.now()}.png`);
-      const outBuffer = processedCanvas.toBuffer('image/png');
+      const outBuffer = canvas.toBuffer('image/png');
       fs.writeFileSync(tempImagePath, outBuffer);
       
-      // Tentar diferentes métodos de decodificação em ordem de preferência
-      let barcode = await this.tryBarcodeDetector(processedCanvas);
-      
-      if (!barcode) {
-        barcode = await this.tryQuagga2(tempImagePath);
-      }
+      // Decodificar com Quagga2
+      const barcode = await this._decodeWithQuagga(tempImagePath);
       
       // Limpar arquivos temporários se não estivermos em desenvolvimento
       if (process.env.NODE_ENV !== 'development') {
@@ -76,10 +73,10 @@ class BarcodeService {
   
   /**
    * Pré-processa uma imagem para melhorar a detecção de códigos de barras
-   * @param {Canvas} canvas - O canvas contendo a imagem original
-   * @returns {Promise<Canvas>} - Um novo canvas com a imagem processada
+   * @private
+   * @param {Canvas} canvas - O canvas contendo a imagem original (modificado in-place)
    */
-  static async preprocessImage(canvas) {
+  static _preprocessImageInPlace(canvas) {
     const ctx = canvas.getContext('2d');
     const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const data = imgData.data;
@@ -97,42 +94,19 @@ class BarcodeService {
       // Converter para tons de cinza
       const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
       data[i] = data[i + 1] = data[i + 2] = avg;
-      
-      // Binarizar a imagem (opcional, descomente se necessário)
-      // const threshold = 128;
-      // const value = avg > threshold ? 255 : 0;
-      // data[i] = data[i + 1] = data[i + 2] = value;
     }
     
     ctx.putImageData(imgData, 0, 0);
-    return canvas;
   }
   
   /**
-   * Tenta decodificar um código de barras usando BarcodeDetector
-   * @param {Canvas} canvas - Canvas contendo a imagem processada
-   * @returns {Promise<string|null>} - Código de barras ou null se não for possível decodificar
-   */
-  static async tryBarcodeDetector(canvas) {
-    try {
-      // Skip barcode-detector as it's causing issues
-      return null;
-    } catch (e) {
-      console.error('Erro ao usar BarcodeDetector:', e);
-    }
-    
-    return null;
-  }
-  
-  /**
-   * Tenta decodificar um código de barras usando Quagga2
+   * Decodifica um código de barras usando Quagga2
+   * @private
    * @param {string} imagePath - Caminho para a imagem processada
    * @returns {Promise<string|null>} - Código de barras ou null se não for possível decodificar
    */
-  static async tryQuagga2(imagePath) {
+  static async _decodeWithQuagga(imagePath) {
     try {
-      const Quagga = require('@ericblade/quagga2');
-      
       return new Promise((resolve) => {
         Quagga.decodeSingle({
           src: imagePath,
@@ -143,9 +117,7 @@ class BarcodeService {
           decoder: {
             readers: [
               'ean_reader',
-              'ean_8_reader',
-              'code_39_reader',
-              'code_128_reader'
+              'ean_8_reader'
             ]
           },
           locate: true,  // Tentar localizar o código de barras na imagem
@@ -158,7 +130,7 @@ class BarcodeService {
         });
       });
     } catch (e) {
-      console.error('Erro ao usar Quagga2:', e);
+      console.error('Erro ao decodificar com Quagga2:', e);
       return null;
     }
   }
